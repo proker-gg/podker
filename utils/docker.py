@@ -1,9 +1,7 @@
 import docker
-import atexit
-import uuid
 import select
-import time
 import json
+from utils.file import create_tarball
 
 client = docker.from_env()
 
@@ -26,10 +24,8 @@ def start_bot(name, script_code):
         auto_remove=True,
     )
 
-    # Put user script into the container
-    # TODO: setup base files + inports in the image
-    exec_script = f"echo '''{script_code}''' > /bot_loop.py"
-    container.exec_run(["bash", "-c", exec_script])
+    tar_data = create_tarball("bot_loop.py", script_code)
+    container.put_archive("/", tar_data)
 
     exec_id = client.api.exec_create(
         container.id,
@@ -82,84 +78,15 @@ def write_to_socket(socket, object):
     socket._sock.send(message.encode())
 
 
-BEATS = [2, 0, 1]
+def write_and_read(socket, object):
+    write_to_socket(socket, object)
+    res = json.loads(read_line_from_socket(socket))
+    return res
 
 
-def get_val(id, winnerid):
-    if winnerid == 0:
-        return "tie"
-    if winnerid == id:
-        return "win"
-    return "loss"
-
-
-def main():
-    print("Last 2 bots")
-
-    num_bots = 2
-    start = time.time()
-
-    script_code1 = open("user_code.py", "r").read()
-
-    script_code2 = open("user_code_2.py", "r").read()
-
-    run_uuid1 = uuid.uuid4()
-    container1, socket1 = start_bot(run_uuid1, script_code1)
-
-    run_uuid2 = uuid.uuid4()
-    container2, socket2 = start_bot(run_uuid2, script_code2)
-
-    message = read_line_from_socket(socket1)
-    message = read_line_from_socket(socket2)
-    print("REC", message)
-    print("started containers", time.time() - start, "seconds")
-
-    # for i in range(10):
-    #     request_move_message = {"message": "echo", "val": None}
-    #     message = json.dumps(request_move_message) + "\n"
-    #     socket1._sock.send(message.encode())
-    #     print(read_line_from_socket(socket1))
-
-    win_count = [0] * 3
-
-    start = time.time()
-
-    for iteration in range(10):
-        request_move_message = {"message": "request_move", "val": None}
-        message = json.dumps(request_move_message) + "\n"
-        socket1._sock.send(message.encode())
-        socket2._sock.send(message.encode())
-
-        res1 = json.loads(read_line_from_socket(socket1))["move"]
-        res2 = json.loads(read_line_from_socket(socket2))["move"]
-
-        # print("ASDAS", res1, res2)
-
-        status = []
-        winner = 0
-
-        res1 = int(res1)
-        res2 = int(res2)
-
-        if res1 == res2:
-            winner = 0
-        elif BEATS[res1] == res2:
-            winner = 1
-        else:
-            winner = 2
-
-        message1 = json.dumps({"message": "result", "val": get_val(1, winner)}) + "\n"
-        message2 = json.dumps({"message": "result", "val": get_val(2, winner)}) + "\n"
-        socket1._sock.send(message1.encode())
-        socket2._sock.send(message2.encode())
-
-        win_count[winner] += 1
-
-    print(win_count)
-    res = container2.exec_run(["cat", "log.txt"])
-    print("LOG", res)
-    print("TIME ELAPSED", time.time() - start)
-    print("Should exit")
+def read_container_file(container, file_name):
+    res = container.exec_run(["cat", file_name])
+    return res.output.decode()
 
 
 # we set auto_remove=True, but clean up all containers
@@ -167,14 +94,8 @@ def clean_up():
     containers = client.containers.list()
     for container in containers:
         try:
-            # throws exception if container is already stopping
             container.stop()
             container.remove()
         except:
+            # catch exception if container is already stopping
             pass
-
-
-atexit.register(clean_up)
-
-if __name__ == "__main__":
-    main()
