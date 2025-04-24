@@ -77,6 +77,11 @@ def read_line_from_socket(socket, timeout=1000):
     return stdout_line.decode().strip()
 
 
+def write_to_socket(socket, object):
+    message = json.dumps(object) + "\n"
+    socket._sock.send(message.encode())
+
+
 BEATS = [2, 0, 1]
 
 
