@@ -8,7 +8,28 @@ class rps_bot:
         pass
 
     def make_move(self, game_state=None):
-        return random.randrange(0, 3)
+        # return 0
+        return min(random.randrange(0, 3) + random.randrange(0, 2), 2)
+
+
+# class rps_bot:
+#     def __init__(self):
+#         self.s = [0, 0, 0]
+#         self.o = {"win": 1, "loss": -1, "tie": 0}
+
+#     def best_outcome(self):
+#         m = max(self.s)
+#         for i, v in enumerate(self.s):
+#             if v == m:
+#                 return i
+#         return 0
+
+#     def make_move(self, game_state=None):
+#         if not game_state.logs:
+#             return 0
+#         move, outcome = game_state.logs[-1]
+#         self.s[move] += self.o[outcome]
+#         return self.best_outcome()
 
 
 class game_state:
@@ -54,20 +75,3 @@ def start_listener():
 
 if __name__ == "__main__":
     start_listener()
-
-
-# game_state
-# state.logs = (yourmove, outcome = "win"| "loss")[]
-# state.round = number
-
-# make_move(game_state) -> 0, 1, 2 = rock, paper, scissors
-
-# Example-
-
-
-class rps_bot:
-    def __init__(self):
-        pass
-
-    def make_move(self, game_state=None):
-        return random.randrange(0, 2)

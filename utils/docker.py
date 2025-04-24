@@ -124,7 +124,7 @@ def main():
 
     start = time.time()
 
-    for iteration in range(3000):
+    for iteration in range(10):
         request_move_message = {"message": "request_move", "val": None}
         message = json.dumps(request_move_message) + "\n"
         socket1._sock.send(message.encode())
@@ -156,6 +156,8 @@ def main():
         win_count[winner] += 1
 
     print(win_count)
+    res = container2.exec_run(["cat", "log.txt"])
+    print("LOG", res)
     print("TIME ELAPSED", time.time() - start)
     print("Should exit")
 
