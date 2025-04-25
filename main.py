@@ -33,8 +33,9 @@ def main():
     container2, socket2 = start_bot(run_uuid2, script_code2)
 
     message = read_line_from_socket(socket1)
+
     message = read_line_from_socket(socket2)
-    print("REC", message)
+
     print("started containers", time.time() - start, "seconds")
 
     win_count = [0] * 3

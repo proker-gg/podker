@@ -5,7 +5,14 @@ from utils.file import create_tarball
 
 client = docker.from_env()
 
-IMAGE = "python:3.11"
+IMAGE = "python:3.11-alpine"
+
+user_wrapper_code = open("user_wrapper.py", "r").read()
+
+
+def put_text_as_file(container, script_code, script_name, dir="/"):
+    tar_data = create_tarball(script_name, script_code)
+    container.put_archive(dir, tar_data)
 
 
 def start_bot(name, script_code):
@@ -24,12 +31,16 @@ def start_bot(name, script_code):
         auto_remove=True,
     )
 
-    tar_data = create_tarball("bot_loop.py", script_code)
-    container.put_archive("/", tar_data)
+    put_text_as_file(
+        container=container, script_code=script_code, script_name="user_code.py"
+    )
+    put_text_as_file(
+        container=container, script_code=user_wrapper_code, script_name="wrapper.py"
+    )
 
     exec_id = client.api.exec_create(
         container.id,
-        cmd=["python", "/bot_loop.py"],
+        cmd=["python", "/wrapper.py"],
         tty=False,
         stdin=True,
         stdout=True,
@@ -43,7 +54,7 @@ def start_bot(name, script_code):
     return container, sock
 
 
-def read_line_from_socket(socket, timeout=1000):
+def read_line_from_socket(socket, timeout=1000, debug=False):
     stdout_line = b""
 
     socket = socket._sock
@@ -69,7 +80,8 @@ def read_line_from_socket(socket, timeout=1000):
 
         except Exception as e:
             print("Error reading output", e)
-
+    if debug:
+        print("READ", stdout_line.decode().strip())
     return stdout_line.decode().strip()
 
 
@@ -78,9 +90,9 @@ def write_to_socket(socket, object):
     socket._sock.send(message.encode())
 
 
-def write_and_read(socket, object):
+def write_and_read(socket, object, debug=False):
     write_to_socket(socket, object)
-    res = json.loads(read_line_from_socket(socket))
+    res = json.loads(read_line_from_socket(socket, debug=debug))
     return res
 
 
