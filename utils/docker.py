@@ -54,7 +54,7 @@ def start_bot(name, script_code):
     return container, sock
 
 
-def read_line_from_socket(socket, timeout=1000, debug=False):
+def _read_line_from_socket(socket, timeout=1000, debug=False):
     stdout_line = b""
 
     socket = socket._sock
@@ -85,6 +85,14 @@ def read_line_from_socket(socket, timeout=1000, debug=False):
     return stdout_line.decode().strip()
 
 
+def read_line_from_socket(socket, debug=False, timeout=1000):
+    try:
+        res = json.loads(_read_line_from_socket(socket, debug=debug, timeout=timeout))
+        return res
+    except:
+        return None
+
+
 def write_to_socket(socket, object):
     message = json.dumps(object) + "\n"
     socket._sock.send(message.encode())
@@ -92,8 +100,7 @@ def write_to_socket(socket, object):
 
 def write_and_read(socket, object, debug=False):
     write_to_socket(socket, object)
-    res = json.loads(read_line_from_socket(socket, debug=debug))
-    return res
+    return read_line_from_socket(socket=socket, debug=debug)
 
 
 def read_container_file(container, file_name):

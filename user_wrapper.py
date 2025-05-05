@@ -1,6 +1,6 @@
 import sys
 import json
-from user_code import rps_bot
+import traceback
 
 
 def log(data):
@@ -35,8 +35,11 @@ class game_state:
 
 
 def start_listener():
+    log("start bot")
     print(json.dumps({"message": "ready"}), flush=True)
     try:
+        from user_code import rps_bot
+
         bot = rps_bot()
         state = game_state(bot)
 
@@ -47,7 +50,7 @@ def start_listener():
                 print(json.dumps(response), flush=True)
 
     except Exception as e:
-        log(e)
+        log("Exception in user code: \n\n" + traceback.format_exc())
         print(e, flush=True)
 
 

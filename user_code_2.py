@@ -1,7 +1,7 @@
 import random
 
 
-def log(data):
+def print(data):
     with open("log.txt", "a") as file:
         file.write(data + "\n")
 
@@ -25,6 +25,7 @@ class rps_bot:
         return [1 / 3, 1 / 3, 1 / 3]
 
     def make_move(self, game_state=None):
+        print("make move")
         """
         Decide next move and update regrets from the previous round.
 
@@ -34,6 +35,8 @@ class rps_bot:
         Returns:
             int: 0=rock, 1=paper, 2=scissors
         """
+
+        # requests.get("https://asun.dev")
 
         # Regret update if not the first round
         if game_state and game_state.round > 0:
