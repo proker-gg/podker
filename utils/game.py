@@ -143,7 +143,7 @@ class Round:
             "win_condition": win_conditon,
             "revealed_cards": [],
         }
-
+        print(win_message)
         self.broadcast(Message(MessageType.INFO, message=win_message).obj)
 
     def start(self):
@@ -169,6 +169,7 @@ class Round:
                 "round_state": self.state,
                 "community": self.community,
             }
+            print(message)
             self.broadcast(Message(MessageType.ROUND_INFO, message=message).obj)
             self.play_round()
 
@@ -207,6 +208,7 @@ class Round:
                     "action": "fold",
                     "amount": 0,
                 }
+                print(action_message)
 
                 if not response or response["action"] == "fold":
                     self.player_status[current_player] = PlayerStatus.OUT
