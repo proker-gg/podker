@@ -22,7 +22,7 @@ def main():
     print("Create 2 bots")
     start = time.time()
 
-    script_code1 = open("user_code.py", "r").read()
+    script_code = open("poker_bot.py", "r").read()
 
     script_code2 = open("user_code_2.py", "r").read()
 
