@@ -1,4 +1,4 @@
-from enum import Enum, auto, IntEnum
+from enum import IntEnum
 
 SUIT_DISPLAY_TEXT = {
     "CLUB": "♣",

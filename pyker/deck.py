@@ -1,5 +1,5 @@
 import random
-from card import Card, Rank, Suit
+from pyker.card import Card, Rank, Suit
 
 
 class Deck:

@@ -1,9 +1,10 @@
 # 1111 1000 1000 1000 1000 1000 # 4 bits per each valu -> 24 bits
 from enum import IntEnum
-from card import Rank
 from itertools import combinations
 from collections import Counter
-from deck import Deck
+
+from pyker.card import Rank
+from pyker.deck import Deck
 
 # 41,213,141,516
 # unsigned long long

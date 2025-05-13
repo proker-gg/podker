@@ -29,6 +29,8 @@ def main():
     for i in range(num_players):
         players.append(Player(i, script_code))
 
+    print("START GAME", time.time() - start)
+    start = time.time()
     poker = Game(players)
     poker.start()
 

@@ -1,24 +1,23 @@
-import enum
+from enum import Enum
 from pyker.deck import Deck
-from player import Player
 from pyker.hand import Hand
 
 MAX_RAISE_ROUNDS = 3
 
 
-class GameState(enum):
+class GameState(Enum):
     PREFLOP = "preflop"
     FLOP = "flop"
     TURN = "turn"
     RIVER = "river"
 
 
-class PlayerStatus(enum):
+class PlayerStatus(Enum):
     IN = "in"
     OUT = "out"
 
 
-class MessageType(enum):
+class MessageType(Enum):
     GAME_START = 1
     ROUND_INFO = 2
     INFO = 3
@@ -63,11 +62,13 @@ class Game:
     def start(self):
         dealer_index = 0
         for i in range(self.config.rounds):
-            self.log.append(Round(self.players, self.stacks, dealer_index, self.config))
+            print("START ROUND", i)
+            print(self.stacks)
+            print("dealer:", dealer_index)
+            round = Round(self.players, self.stacks, dealer_index, self.config)
             dealer_index = (dealer_index + 1) % len(self.players)
-            round = Round(self.players, dealer_index, self.config)
-            result, log = round.start()
-            self.log.append(log)
+            round.start()
+            # self.log.append(log)
 
 
 class Round:
@@ -92,8 +93,6 @@ class Round:
         for _ in players:
             hand = [deck.deal(), deck.deal()]
             self.hands.append(hand)
-
-        self.start()
 
     def broadcast(self, message):
         for player in self.players:
@@ -134,7 +133,7 @@ class Round:
             win_conditon, tb = Hand.display_winning_hand(bit_string)
 
             # no split pot conditions yet
-            self.stacks[winner_index] += self.pot
+        self.stacks[winner_index] += self.pot
 
         win_message = {
             "player": winner_index,
@@ -144,7 +143,7 @@ class Round:
             "revealed_cards": [],
         }
         print(win_message)
-        self.broadcast(Message(MessageType.INFO, message=win_message).obj)
+        self.broadcast(Message(MessageType.INFO.value, message=win_message).obj)
 
     def start(self):
         # rest round information
@@ -152,11 +151,12 @@ class Round:
         self.player_status = [PlayerStatus.IN] * self.num_players
 
         # handle big and small blind
-        self.bets[current_player] = self.small_blind
-        self.stacks[current_player] -= self.small_blind
-        self.bets[(current_player + 1) % self.num_players] = self.big_blind
-        self.stacks[(current_player + 1) % self.num_players] -= self.big_blind
-
+        self.bets[current_player] = self.config.small_blind
+        self.stacks[current_player] -= self.config.small_blind
+        self.bets[(current_player + 1) % self.num_players] = self.config.big_blind
+        self.stacks[(current_player + 1) % self.num_players] -= self.config.big_blind
+        self.pot += self.config.small_blind
+        self.pot += self.config.big_blind
         # broadcast round start to other players
         rounds = [GameState.PREFLOP, GameState.FLOP, GameState.TURN, GameState.RIVER]
         cards_to_deal = [3, 1, 1, 0]
@@ -166,11 +166,11 @@ class Round:
             # TOOD: create some sort of types for messages
             message = {
                 "dealer": self.dealer_index,
-                "round_state": self.state,
+                "round_state": self.state.value,
                 "community": self.community,
             }
             print(message)
-            self.broadcast(Message(MessageType.ROUND_INFO, message=message).obj)
+            self.broadcast(Message(MessageType.ROUND_INFO.value, message=message).obj)
             self.play_round()
 
             if self.check_all_fold():
@@ -199,7 +199,7 @@ class Round:
 
                 player = self.players[current_player]
 
-                request_move_message = Message(MessageType.REQUEST_ACTION)
+                request_move_message = Message(MessageType.REQUEST_ACTION.value)
 
                 response = player.send_and_read(request_move_message.obj)
 
@@ -223,7 +223,9 @@ class Round:
                     }
 
                 # broadcast move to other players
-                self.broadcast(Message(MessageType.INFO, message=action_message).obj)
+                self.broadcast(
+                    Message(MessageType.INFO.value, message=action_message).obj
+                )
 
                 current_player = (current_player + 1) % len(self.players)
 
