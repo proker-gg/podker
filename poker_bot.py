@@ -1,15 +1,19 @@
 import random
 
 
+def log(*args):
+    s = " ".join([str(arg) for arg in args])
+    with open("log.txt", "a") as file:
+        file.write("BOT: " + s + "\n")
+
+
 class poker_bot:
-    def __init__(self):
+    def __init__(self, config):
+        log("recieved config", config)
         pass
 
-    def make_move(self, valid_moves, game_state):
-        # return 0
+    def make_move(self, round_state):
+        return 1
 
-        # valid_move will be []
-        # 0 - fold
-        # 1 - bet, min_cost (cost to call)
-
-        return min(random.randrange(0, 3) + random.randrange(0, 2), 2)
+    def round_result(self):
+        pass

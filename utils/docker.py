@@ -1,7 +1,7 @@
 import docker
 import select
 import json
-from utils.file import create_tarball
+from utils.file import create_tarball, make_tar_directory
 
 client = docker.from_env()
 
@@ -12,6 +12,12 @@ user_wrapper_code = open("user_wrapper.py", "r").read()
 
 def put_text_as_file(container, script_code, script_name, dir="/"):
     tar_data = create_tarball(script_name, script_code)
+    container.put_archive(dir, tar_data)
+
+
+def put_directory(container, source_dir, dir="/"):
+    tar_data = make_tar_directory(source_dir)
+    # container.exec_run(f"mkdir -p {dir}")
     container.put_archive(dir, tar_data)
 
 
@@ -36,6 +42,11 @@ def start_bot(name, script_code):
     )
     put_text_as_file(
         container=container, script_code=user_wrapper_code, script_name="wrapper.py"
+    )
+
+    put_directory(
+        container=container,
+        source_dir="pyker",
     )
 
     exec_id = client.api.exec_create(
@@ -99,7 +110,11 @@ def write_to_socket(socket, object):
 
 
 def write_and_read(socket, object, debug=False):
+    if debug:
+        print("WRITE", object, "TO", socket)
     write_to_socket(socket, object)
+    if debug:
+        print("WRITE FINISHED")
     return read_line_from_socket(socket=socket, debug=debug)
 
 

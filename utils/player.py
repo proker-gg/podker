@@ -44,8 +44,8 @@ class Player:
     def send(self, message):
         write_to_socket(self.socket, object=message)
 
-    def send_and_read(self, message):
-        return write_and_read(self.socket, message)
+    def send_and_read(self, message, debug=False):
+        return write_and_read(self.socket, message, debug=debug)
 
     def read_logs(self):
         return read_container_file(self.container, "log.txt")

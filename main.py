@@ -23,7 +23,7 @@ def main():
 
     script_code = open("poker_bot.py", "r").read()
 
-    num_players = 4
+    num_players = 2
 
     players = []
     for i in range(num_players):
@@ -31,8 +31,15 @@ def main():
 
     print("START GAME", time.time() - start)
     start = time.time()
-    poker = Game(players)
-    poker.start()
+    try:
+        poker = Game(players)
+        poker.start()
+    except Exception as e:
+        print(e)
+
+    for i, p in enumerate(players):
+        print("LOGS", i)
+        print(p.read_logs())
 
     print("END", time.time() - start)
 

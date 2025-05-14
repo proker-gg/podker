@@ -18,10 +18,10 @@ class PlayerStatus(Enum):
 
 
 class MessageType(Enum):
-    GAME_START = 1
-    ROUND_INFO = 2
-    INFO = 3
-    REQUEST_ACTION = 4
+    GAME_START = "game_start"
+    ROUND_INFO = "round_info"
+    INFO = "info"
+    REQUEST_ACTION = "request_action"
 
 
 class Message:
@@ -31,7 +31,7 @@ class Message:
 
     @property
     def obj(self):
-        return {"type": self.type, "message": self.message}
+        return {"type": self.type.value, "message": self.message}
 
 
 class Config:
@@ -42,7 +42,7 @@ class Config:
         big_blind=2,
         starting_stack=100,
         ante=0,
-        rounds=10,
+        rounds=1,
     ):
         self.small_blind = small_blind
         self.big_blind = big_blind
@@ -50,6 +50,17 @@ class Config:
         self.ante = ante
         self.max_raise_rounds = max_raise_rounds
         self.rounds = rounds
+
+    @property
+    def obj(self):
+        return {
+            "small_blind": self.small_blind,
+            "big_blind": self.big_blind,
+            "starting_stack": self.starting_stack,
+            "ante": self.ante,
+            "max_raise_rounds": self.max_raise_rounds,
+            "rounds": self.rounds,
+        }
 
 
 class Game:
@@ -60,6 +71,18 @@ class Game:
         self.stacks = [config.starting_stack] * len(players)
 
     def start(self):
+        for i, player in enumerate(self.players):
+            message = Message(
+                MessageType.GAME_START,
+                {
+                    "player_count": len(self.players),
+                    "player_index": i,
+                    "config": self.config.obj,
+                },
+            )
+            player.send(message.obj)
+            print(message.obj)
+
         dealer_index = 0
         for i in range(self.config.rounds):
             print("START ROUND", i)
@@ -92,7 +115,7 @@ class Round:
 
         for _ in players:
             hand = [deck.deal(), deck.deal()]
-            self.hands.append(hand)
+            self.hands.append(Hand(hand))
 
     def broadcast(self, message):
         for player in self.players:
@@ -139,11 +162,11 @@ class Round:
             "player": winner_index,
             "action": "win",
             "amount": self.pot,
-            "win_condition": win_conditon,
+            "win_condition": win_conditon.value,
             "revealed_cards": [],
         }
         print(win_message)
-        self.broadcast(Message(MessageType.INFO.value, message=win_message).obj)
+        self.broadcast(Message(MessageType.INFO, message=win_message).obj)
 
     def start(self):
         # rest round information
@@ -157,6 +180,7 @@ class Round:
         self.stacks[(current_player + 1) % self.num_players] -= self.config.big_blind
         self.pot += self.config.small_blind
         self.pot += self.config.big_blind
+
         # broadcast round start to other players
         rounds = [GameState.PREFLOP, GameState.FLOP, GameState.TURN, GameState.RIVER]
         cards_to_deal = [3, 1, 1, 0]
@@ -167,10 +191,14 @@ class Round:
             message = {
                 "dealer": self.dealer_index,
                 "round_state": self.state.value,
-                "community": self.community,
+                "community": [str(c) for c in self.community],
             }
-            print(message)
-            self.broadcast(Message(MessageType.ROUND_INFO.value, message=message).obj)
+            if round == GameState.PREFLOP:
+                for i, player in enumerate(self.players):
+                    message["hand"] = [str(c) for c in self.hands[i].cards]
+                    player.send(Message(MessageType.ROUND_INFO, message=message).obj)
+            else:
+                self.broadcast(Message(MessageType.ROUND_INFO, message=message).obj)
             self.play_round()
 
             if self.check_all_fold():
@@ -199,7 +227,7 @@ class Round:
 
                 player = self.players[current_player]
 
-                request_move_message = Message(MessageType.REQUEST_ACTION.value)
+                request_move_message = Message(MessageType.REQUEST_ACTION)
 
                 response = player.send_and_read(request_move_message.obj)
 
@@ -208,24 +236,33 @@ class Round:
                     "action": "fold",
                     "amount": 0,
                 }
-                print(action_message)
 
                 if not response or response["action"] == "fold":
-                    self.player_status[current_player] = PlayerStatus.OUT
+                    # self.player_status[current_player] = PlayerStatus.OUT
+                    amount = 5
+                    self.bets[current_player] += amount
+                    self.pot += amount
+                    self.stacks[current_player] -= amount
+                    action_message = {
+                        "player": current_player,
+                        "action": "bet",
+                        "amount": amount,
+                    }
                 else:
                     amount = response["amount"]
                     self.bets[current_player] += amount
                     self.pot += amount
+                    self.stacks[current_player] -= amount
                     action_message = {
                         "player": current_player,
                         "action": "bet",
                         "amount": amount,
                     }
 
+                print(action_message)
+
                 # broadcast move to other players
-                self.broadcast(
-                    Message(MessageType.INFO.value, message=action_message).obj
-                )
+                self.broadcast(Message(MessageType.INFO, message=action_message).obj)
 
                 current_player = (current_player + 1) % len(self.players)
 

@@ -128,7 +128,7 @@ class Hand:
         return -1
 
     @classmethod
-    def display_winning_hand(n):
+    def display_winning_hand(cls, n):
         win_cond = n >> 20
         tibreaker = []
 
