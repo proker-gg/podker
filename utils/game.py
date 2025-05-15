@@ -117,7 +117,9 @@ class Round:
             hand = [deck.deal(), deck.deal()]
             self.hands.append(Hand(hand))
 
-    def broadcast(self, message):
+    def broadcast(self, message, debug=False):
+        if debug:
+            print("BROADCAST:", message)
         for player in self.players:
             player.send(message)
 
@@ -153,8 +155,8 @@ class Round:
 
             bit_string, winner_index = win_conditions[0]
 
-            win_conditon, tb = Hand.display_winning_hand(bit_string)
-
+            win_condition_enum, tb = Hand.display_winning_hand(bit_string)
+            win_conditon = win_condition_enum.value
             # no split pot conditions yet
         self.stacks[winner_index] += self.pot
 
@@ -162,7 +164,7 @@ class Round:
             "player": winner_index,
             "action": "win",
             "amount": self.pot,
-            "win_condition": win_conditon.value,
+            "win_condition": win_conditon,
             "revealed_cards": [],
         }
         print(win_message)
@@ -193,6 +195,7 @@ class Round:
                 "round_state": self.state.value,
                 "community": [str(c) for c in self.community],
             }
+            print("ROUND_INFO", message)
             if round == GameState.PREFLOP:
                 for i, player in enumerate(self.players):
                     message["hand"] = [str(c) for c in self.hands[i].cards]
@@ -211,19 +214,25 @@ class Round:
 
     def play_round(self):
         round_over = False
-
+        max_bet = self.config.big_blind
+        last_bet_index = (self.dealer_index + 1) % self.num_players
         for raise_round in range(self.config.max_raise_rounds):
-
             current_player = (self.dealer_index + 1) % self.num_players
 
             if self.state == GameState.PREFLOP:
                 # for first round, first 2 players are last to act
-                current_player = (current_player + 2) % self.num_players
+                # skip dealer, bb, sb, then utg is first to go
+                current_player = (current_player + 3) % self.num_players
+                last_bet_index = (self.dealer_index + 3) % self.num_players
 
             for i in range(len(self.players)):
                 if self.player_status[current_player] == PlayerStatus.OUT:
                     current_player = (current_player + 1) % len(self.players)
                     continue
+
+                if current_player == last_bet_index and raise_round > 0:
+                    round_over = True
+                    break
 
                 player = self.players[current_player]
 
@@ -238,16 +247,7 @@ class Round:
                 }
 
                 if not response or response["action"] == "fold":
-                    # self.player_status[current_player] = PlayerStatus.OUT
-                    amount = 5
-                    self.bets[current_player] += amount
-                    self.pot += amount
-                    self.stacks[current_player] -= amount
-                    action_message = {
-                        "player": current_player,
-                        "action": "bet",
-                        "amount": amount,
-                    }
+                    self.player_status[current_player] = PlayerStatus.OUT
                 else:
                     amount = response["amount"]
                     self.bets[current_player] += amount
@@ -258,6 +258,11 @@ class Round:
                         "action": "bet",
                         "amount": amount,
                     }
+
+                    if amount > max_bet:
+                        max_bet = amount
+                        round_over = False
+                        last_bet_index = current_player
 
                 print(action_message)
 
