@@ -52,6 +52,7 @@ class Config:
         self.ante = ante
         self.max_raise_rounds = max_raise_rounds
         self.rounds = rounds
+        self.buy_in = buy_in
 
     @property
     def obj(self):
@@ -96,7 +97,7 @@ class Game:
             # self.log.append(log)
 
 
-def find_winners(win_conditions, start_player) -> list[int]:
+def find_winners(win_conditions) -> list[int]:
     """
     win_conditions: [(bit_string, player_index)]
 
@@ -114,28 +115,21 @@ def find_winners(win_conditions, start_player) -> list[int]:
     return winners, win_condition.value
 
 
-def handle_win_side_pot(bets, stacks, win_conditions, player_status):
+def handle_win_with_side_pot(bets, win_conditions, player_status):
     num_players = len(bets)
 
-    # find people who went all in - player_status == IN and st == 0
-    all_in_counts = set()
+    # find all distinct bet amounts for side pots
+    sp_amounts = set()
     for i in range(num_players):
-        if player_status[i] == PlayerStatus.IN and stacks[i] == 0:
-            all_in_counts.add(bets[i])
+        if player_status[i] == PlayerStatus.IN:
+            sp_amounts.add(bets[i])
 
-    side_pot_starting_amounts = sorted(list(all_in_counts))
+    side_pot_starting_amounts = sorted(list(sp_amounts))
 
     win_amounts = [0] * num_players
 
-    # no side pot case
-    if len(side_pot_starting_amounts) == 0:
-        winners, win_cond = find_winners(win_conditions)
-        for winner in winners:
-            win_amounts[winner] += stacks[winner]
-
-        return win_amounts
-
     sp_amount_prefix = 0
+
     for i, amount in enumerate(side_pot_starting_amounts):
         current_sp_amount = amount - sp_amount_prefix
         sp_amount_prefix = amount
@@ -145,11 +139,15 @@ def handle_win_side_pot(bets, stacks, win_conditions, player_status):
             if player_status[i] == PlayerStatus.IN and bets[i] >= current_sp_amount:
                 sp_win_conds.append(win_conditions[i])
 
+        # total value of side pot
+        pot_amount = current_sp_amount * len(sp_win_conds)
+
         winners, win_cond = find_winners(sp_win_conds)
         # TODO: Log side pots, winners, and win conditions
         for winner in winners:
-            win_amounts[winner] += current_sp_amount / len(winners)
+            win_amounts[winner] += pot_amount / len(winners)
 
+    # handle logic for who shows what cards
     return win_amounts
 
 
@@ -204,6 +202,8 @@ class Round:
             for i in range(len(self.players)):
                 if self.player_status[i] == PlayerStatus.IN:
                     winner_index = i
+                    self.stacks[winner_index] += self.pot
+
                     break
         else:
             win_conditions = []
@@ -212,30 +212,33 @@ class Round:
                 if self.player_status[i] == PlayerStatus.IN:
                     win_conditions.append((hand.score_hand(self.community), i))
 
-            win_conditions.sort(reverse=True)
-
-            bit_string, winner_index = win_conditions[0]
-
-            win_condition_enum, tb = Hand.display_winning_hand(bit_string)
-            win_conditon = win_condition_enum.value
-
-            # reveal hands until winner
+            results = handle_win_with_side_pot(
+                self.bets, win_conditions, self.player_status
+            )
 
             for i in range(self.num_players):
-                cur_index = (self.dealer_index + i + 1) % self.num_players
-                if self.player_status[cur_index] == PlayerStatus.IN:
-                    cards = [str(c) for c in self.hands[cur_index].cards]
-                    shown_hands[cur_index] = cards
-                if cur_index == winner_index:
-                    break
+                self.stacks[i] += results[i]
+            # win_conditions.sort(reverse=True)
 
-            # no split pot conditions yet
-        self.stacks[winner_index] += self.pot
+            # bit_string, winner_index = win_conditions[0]
+
+            # win_condition_enum, tb = Hand.display_winning_hand(bit_string)
+            # win_conditon = win_condition_enum.value
+
+            # # reveal hands until winner
+
+            # for i in range(self.num_players):
+            #     cur_index = (self.dealer_index + i + 1) % self.num_players
+            #     if self.player_status[cur_index] == PlayerStatus.IN:
+            #         cards = [str(c) for c in self.hands[cur_index].cards]
+            #         shown_hands[cur_index] = cards
+            #     if cur_index == winner_index:
+            #         break
 
         win_message = {
-            "player": winner_index,
+            "player": -1,
+            "amounts": results,
             "action": "win",
-            "amount": self.pot,
             "win_condition": win_conditon,
             "revealed_cards": shown_hands,
         }

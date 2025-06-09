@@ -132,9 +132,8 @@ class game_state:
                 self.stacks[player] -= value["amount"]
                 self.pot += value["amount"]
             if action == "win":
-                amount = value["amount"]
-                self.stacks[player] += amount
-
+                for i in range(len(self.players)):
+                    self.stacks[i] += value["amounts"][i]
             return
 
         if key == MessageType.REQUEST_ACTION.value:
