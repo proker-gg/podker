@@ -97,60 +97,6 @@ class Game:
             # self.log.append(log)
 
 
-def find_winners(win_conditions) -> list[int]:
-    """
-    win_conditions: [(bit_string, player_index)]
-
-    returns list of player indices that won, text description of win
-    """
-    win_conditions.sort(reverse=True)
-
-    winners = []
-    win_condition, tb = Hand.display_winning_hand(win_conditions[0][0])
-
-    for bit_string, player_index in win_conditions:
-        if bit_string == win_conditions[0][0]:
-            winners.append(player_index)
-
-    return winners, win_condition.value
-
-
-def handle_win_with_side_pot(bets, win_conditions, player_status):
-    num_players = len(bets)
-
-    # find all distinct bet amounts for side pots
-    sp_amounts = set()
-    for i in range(num_players):
-        if player_status[i] == PlayerStatus.IN:
-            sp_amounts.add(bets[i])
-
-    side_pot_starting_amounts = sorted(list(sp_amounts))
-
-    win_amounts = [0] * num_players
-
-    sp_amount_prefix = 0
-
-    for i, amount in enumerate(side_pot_starting_amounts):
-        current_sp_amount = amount - sp_amount_prefix
-        sp_amount_prefix = amount
-        # all players who have bet >= current_sp_amount are in the side pot
-        sp_win_conds = []
-        for i in range(num_players):
-            if player_status[i] == PlayerStatus.IN and bets[i] >= current_sp_amount:
-                sp_win_conds.append(win_conditions[i])
-
-        # total value of side pot
-        pot_amount = current_sp_amount * len(sp_win_conds)
-
-        winners, win_cond = find_winners(sp_win_conds)
-        # TODO: Log side pots, winners, and win conditions
-        for winner in winners:
-            win_amounts[winner] += pot_amount / len(winners)
-
-    # handle logic for who shows what cards
-    return win_amounts
-
-
 class Round:
     def __init__(self, players, stacks, dealer_index=0, config=Config()):
         self.deck = deck = Deck()
@@ -192,6 +138,79 @@ class Round:
                 count += 1
         return count <= 1
 
+    def find_winners(self, win_conditions) -> list[int]:
+        """
+        win_conditions: [(bit_string, player_index)]
+
+        returns:
+            list of player indices that won,
+            text description of win,
+            list of players that show
+        """
+        win_conditions.sort(reverse=True)
+        all_players = set([index for cond, index in win_conditions])
+        winners = []
+        win_condition, tb = Hand.display_winning_hand(win_conditions[0][0])
+
+        for bit_string, player_index in win_conditions:
+            if bit_string == win_conditions[0][0]:
+                winners.append(player_index)
+
+        show = set(winners)
+        # everone in the pot before the first winner is forced to show
+        for i in range(self.num_players):
+            cur_index = (self.dealer_index + i + 1) % self.num_players
+            if i in all_players:
+                show.add(cur_index)
+            if cur_index in winners:
+                break
+
+        return winners, win_condition.value, list(show)
+
+    def handle_win_with_side_pot(self, win_conditions):
+        bets = self.bets
+        player_status = self.player_status
+
+        # find all distinct bet amounts for side pots
+        sp_amounts = set()
+        for i in range(self.num_players):
+            if player_status[i] == PlayerStatus.IN:
+                sp_amounts.add(bets[i])
+
+        side_pot_starting_amounts = sorted(list(sp_amounts))
+
+        win_amounts = [0] * self.num_players
+
+        sp_amount_prefix = 0
+
+        shown_hands = [[] for i in range(self.num_players)]
+
+        sp_win_desc = []
+
+        for amount in side_pot_starting_amounts:
+            current_sp_amount = amount - sp_amount_prefix
+            sp_amount_prefix = amount
+            # all players who have bet >= current_sp_amount are in the side pot
+            sp_win_conds = []
+            for i in range(self.num_players):
+                if player_status[i] == PlayerStatus.IN and bets[i] >= current_sp_amount:
+                    sp_win_conds.append(win_conditions[i])
+
+            # total value of side pot
+            pot_amount = current_sp_amount * len(sp_win_conds)
+
+            winners, win_cond, show = self.find_winners(sp_win_conds)
+            sp_win_desc.append(win_cond)
+            # TODO: Log side pots, winners, and win conditions
+            for winner in winners:
+                win_amounts[winner] += pot_amount / len(winners)
+
+            for player_index in show:
+                cards = [str(c) for c in self.hands[player_index].cards]
+                shown_hands[player_index] = cards
+
+        return win_amounts, shown_hands, sp_win_desc
+
     def handle_win(self):
         # handle show and win logic
         winner_index = -1
@@ -205,6 +224,14 @@ class Round:
                     self.stacks[winner_index] += self.pot
 
                     break
+
+            for i in range(self.num_players):
+                cur_index = (self.dealer_index + i + 1) % self.num_players
+                if self.player_status[cur_index] == PlayerStatus.IN:
+                    cards = [str(c) for c in self.hands[cur_index].cards]
+                    shown_hands[cur_index] = cards
+                if cur_index == winner_index:
+                    break
         else:
             win_conditions = []
 
@@ -212,28 +239,12 @@ class Round:
                 if self.player_status[i] == PlayerStatus.IN:
                     win_conditions.append((hand.score_hand(self.community), i))
 
-            results = handle_win_with_side_pot(
-                self.bets, win_conditions, self.player_status
+            results, shown_hands, win_conditon = self.handle_win_with_side_pot(
+                win_conditions
             )
 
             for i in range(self.num_players):
                 self.stacks[i] += results[i]
-            # win_conditions.sort(reverse=True)
-
-            # bit_string, winner_index = win_conditions[0]
-
-            # win_condition_enum, tb = Hand.display_winning_hand(bit_string)
-            # win_conditon = win_condition_enum.value
-
-            # # reveal hands until winner
-
-            # for i in range(self.num_players):
-            #     cur_index = (self.dealer_index + i + 1) % self.num_players
-            #     if self.player_status[cur_index] == PlayerStatus.IN:
-            #         cards = [str(c) for c in self.hands[cur_index].cards]
-            #         shown_hands[cur_index] = cards
-            #     if cur_index == winner_index:
-            #         break
 
         win_message = {
             "player": -1,
@@ -258,6 +269,7 @@ class Round:
         self.pot += self.config.small_blind
         self.pot += self.config.big_blind
 
+        print("bb", self.config.big_blind, "sb", self.config.small_blind)
         # broadcast round start to other players
         rounds = [GameState.PREFLOP, GameState.FLOP, GameState.TURN, GameState.RIVER]
 
@@ -273,6 +285,7 @@ class Round:
                 "community": [str(c) for c in self.community],
             }
             print("ROUND_INFO", message)
+            print("POT: ", self.pot, "BETS: ", self.bets)
             if round == GameState.PREFLOP:
                 for i, player in enumerate(self.players):
                     message["hand"] = [str(c) for c in self.hands[i].cards]
@@ -292,22 +305,33 @@ class Round:
     def play_round(self):
         round_over = False
         max_bet = self.config.big_blind
-        last_bet_index = (self.dealer_index + 1) % self.num_players
-        for raise_round in range(self.config.max_raise_rounds):
+        last_bet_index = -1
+
+        for raise_round in range(self.config.max_raise_rounds + 1):
             current_player = (self.dealer_index + 1) % self.num_players
 
             if self.state == GameState.PREFLOP:
                 # for first round, first 2 players are last to act
                 # skip dealer, bb, sb, then utg is first to go
-                current_player = (current_player + 3) % self.num_players
-                last_bet_index = (self.dealer_index + 3) % self.num_players
+                current_player = (self.dealer_index + 3) % self.num_players
+                if raise_round == 0:
+                    last_bet_index = (self.dealer_index + 2) % self.num_players
 
             for i in range(len(self.players)):
-                if self.player_status[current_player] == PlayerStatus.OUT:
+                # skip if player folded or bet
+                if (
+                    self.player_status[current_player] == PlayerStatus.OUT
+                    or self.player_status[current_player] == PlayerStatus.BUST
+                ):
                     current_player = (current_player + 1) % len(self.players)
                     continue
 
-                if current_player == last_bet_index and raise_round > 0:
+                if self.stacks[current_player] == 0:
+                    print("player", current_player, "is all in")
+                    current_player = (current_player + 1) % len(self.players)
+                    continue
+
+                if current_player == last_bet_index:
                     round_over = True
                     break
 
@@ -316,7 +340,7 @@ class Round:
                 request_move_message = Message(MessageType.REQUEST_ACTION)
 
                 response = player.send_and_read(request_move_message.obj)
-
+                print("RECV", response)
                 action_message = {
                     "player": current_player,
                     "action": "fold",
@@ -327,6 +351,18 @@ class Round:
                     self.player_status[current_player] = PlayerStatus.OUT
                 else:
                     amount = response["amount"]
+                    # check all in
+                    if amount >= self.stacks[current_player]:
+                        amount = self.stacks[current_player]
+                    # check invalid bet amount
+                    new_bet_amount = self.bets[current_player] + amount
+                    # can only call on last raise round
+                    if (
+                        new_bet_amount > max_bet
+                        and raise_round == self.config.max_raise_rounds
+                    ):
+                        amount = max_bet - self.bets[current_player]
+
                     self.bets[current_player] += amount
                     self.pot += amount
                     self.stacks[current_player] -= amount
@@ -336,8 +372,8 @@ class Round:
                         "amount": amount,
                     }
 
-                    if amount > max_bet:
-                        max_bet = amount
+                    if self.bets[current_player] > max_bet:
+                        max_bet = self.bets[current_player]
                         round_over = False
                         last_bet_index = current_player
 

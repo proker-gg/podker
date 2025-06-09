@@ -132,7 +132,7 @@ class game_state:
                 self.stacks[player] -= value["amount"]
                 self.pot += value["amount"]
             if action == "win":
-                for i in range(len(self.players)):
+                for i in range(self.player_count):
                     self.stacks[i] += value["amounts"][i]
             return
 
@@ -147,6 +147,7 @@ class game_state:
                 "stacks": self.stacks,
                 "bets": self.bets,
                 "pot": self.pot,
+                "config": self.config,
             }
             return self.bot.make_move(round_state_copy)
 
