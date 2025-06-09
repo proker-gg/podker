@@ -169,7 +169,7 @@ def start_listener():
                 print(json.dumps(response), flush=True)
 
     except Exception as e:
-        log("Uncaught in user code: \n\n", traceback.format_exc(), "\n\n")
+        log("Uncaught exception in user code: \n\n", traceback.format_exc(), "\n\n")
         log("Bot will only fold from now on")
 
     # user code crashed, consume rest of socket
