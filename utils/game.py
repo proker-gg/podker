@@ -43,8 +43,8 @@ class Config:
         big_blind=2,
         starting_stack=100,
         ante=0,
-        rounds=1,
-        buy_in=100,
+        rounds=4,
+        buy_ins=1,
     ):
         self.small_blind = small_blind
         self.big_blind = big_blind
@@ -52,7 +52,7 @@ class Config:
         self.ante = ante
         self.max_raise_rounds = max_raise_rounds
         self.rounds = rounds
-        self.buy_in = buy_in
+        self.buy_ins = buy_ins
 
     @property
     def obj(self):
@@ -63,6 +63,7 @@ class Config:
             "ante": self.ante,
             "max_raise_rounds": self.max_raise_rounds,
             "rounds": self.rounds,
+            "buy_ins": self.buy_ins,
         }
 
 
@@ -72,6 +73,16 @@ class Game:
         self.config = config
         self.log = []
         self.stacks = [config.starting_stack] * len(players)
+        self.buy_ins = [config.buy_ins] * len(players)
+
+    def pnl(self):
+        pnl = []
+        for i in range(len(self.players)):
+            buy_in_count = self.config.buy_ins - self.buy_ins[i] + 1
+
+            pnl.append(self.stacks[i] - self.config.starting_stack * buy_in_count)
+
+        return pnl
 
     def start(self):
         for i, player in enumerate(self.players):
@@ -89,24 +100,41 @@ class Game:
         dealer_index = 0
         for i in range(self.config.rounds):
             print("START ROUND", i)
-            print(self.stacks)
+            print("STACKS", self.stacks)
+            print("BUY INS", self.buy_ins)
             print("dealer:", dealer_index)
-            round = Round(self.players, self.stacks, dealer_index, self.config)
+            round = Round(
+                self.players, self.stacks, self.buy_ins, dealer_index, self.config
+            )
             dealer_index = (dealer_index + 1) % len(self.players)
             round.start()
-            # self.log.append(log)
+            for i in range(len(self.players)):
+                if self.stacks[i] == 0:
+                    if self.buy_ins[i] > 0:
+                        print("player", i, "busted", self.buy_ins[i], "more buy ins")
+                        self.buy_ins[i] -= 1
+                        self.stacks[i] = self.config.starting_stack
+
+            num_players_in = 0
+            for i in range(len(self.players)):
+                if self.stacks[i] > 0:
+                    num_players_in += 1
+
+            if num_players_in <= 1:
+                print("GAME OVER")
+                print("PNL", self.pnl())
+                break
 
 
 class Round:
-    def __init__(self, players, stacks, dealer_index=0, config=Config()):
+    def __init__(self, players, stacks, buy_ins, dealer_index=0, config=Config()):
         self.deck = deck = Deck()
         deck.shuffle()
 
         self.players = players
         self.num_players = len(players)
         self.bets = [0] * len(players)
-        self.player_status = [PlayerStatus.IN] * len(players)
-        self.buy_ins = [config.buy_in] * len(players)
+        self.buy_ins = buy_ins
         self.hands = []
         self.pot = 0
         self.community = []
@@ -116,6 +144,18 @@ class Round:
         self.stacks = stacks
 
         self.config = config
+
+        statuses = []
+        for i in range(self.num_players):
+            if stacks[i] > 0 and buy_ins[i] >= 0:
+                statuses.append(PlayerStatus.IN)
+            else:
+                statuses.append(PlayerStatus.BUST)
+
+        if statuses.count(PlayerStatus.IN) <= 1:
+            assert "cannot start round with one player in"
+
+        self.player_status = statuses
 
         for _ in players:
             hand = [deck.deal(), deck.deal()]
@@ -148,7 +188,7 @@ class Round:
             list of players that show
         """
         win_conditions.sort(reverse=True)
-        all_players = set([index for cond, index in win_conditions])
+        all_players = set([index for _, index in win_conditions])
         winners = []
         win_condition, tb = Hand.display_winning_hand(win_conditions[0][0])
 
@@ -156,8 +196,8 @@ class Round:
             if bit_string == win_conditions[0][0]:
                 winners.append(player_index)
 
-        show = set(winners)
-        # everone in the pot before the first winner is forced to show
+        show = set(winners)  # everyone who won must show
+        # everyone in the pot before the first winner is forced to show
         for i in range(self.num_players):
             cur_index = (self.dealer_index + i + 1) % self.num_players
             if i in all_players:
@@ -173,9 +213,8 @@ class Round:
 
         # find all distinct bet amounts for side pots
         sp_amounts = set()
-        for i in range(self.num_players):
-            if player_status[i] == PlayerStatus.IN:
-                sp_amounts.add(bets[i])
+        for _, player_index in win_conditions:
+            sp_amounts.add(bets[player_index])
 
         side_pot_starting_amounts = sorted(list(sp_amounts))
 
@@ -192,12 +231,13 @@ class Round:
             sp_amount_prefix = amount
             # all players who have bet >= current_sp_amount are in the side pot
             sp_win_conds = []
-            for i in range(self.num_players):
-                if player_status[i] == PlayerStatus.IN and bets[i] >= current_sp_amount:
+            for i, (_, player_index) in enumerate(win_conditions):
+                if bets[player_index] >= amount:
                     sp_win_conds.append(win_conditions[i])
 
             # total value of side pot
             pot_amount = current_sp_amount * len(sp_win_conds)
+            print("SIDE POT bet amount:", amount, "pot amount:", pot_amount)
 
             winners, win_cond, show = self.find_winners(sp_win_conds)
             sp_win_desc.append(win_cond)
@@ -258,22 +298,41 @@ class Round:
 
     def start(self):
         # rest round information
-        current_player = (self.dealer_index + 1) % self.num_players
-        self.player_status = [PlayerStatus.IN] * self.num_players
+        # self.player_status = [PlayerStatus.IN] * self.num_players
 
         # handle big and small blind
-        self.bets[current_player] = self.config.small_blind
-        self.stacks[current_player] -= self.config.small_blind
-        self.bets[(current_player + 1) % self.num_players] = self.config.big_blind
-        self.stacks[(current_player + 1) % self.num_players] -= self.config.big_blind
-        self.pot += self.config.small_blind
-        self.pot += self.config.big_blind
+        # self.bets[current_player] = self.config.small_blind
+        # self.stacks[current_player] -= self.config.small_blind
+        # self.bets[(current_player + 1) % self.num_players] = self.config.big_blind
+        # self.stacks[(current_player + 1) % self.num_players] -= self.config.big_blind
+        # self.pot += self.config.small_blind
+        # self.pot += self.config.big_blind
 
-        print("bb", self.config.big_blind, "sb", self.config.small_blind)
+        # print("bb", self.config.big_blind, "sb", self.config.small_blind)
         # broadcast round start to other players
         rounds = [GameState.PREFLOP, GameState.FLOP, GameState.TURN, GameState.RIVER]
 
         cards_to_deal = [3, 1, 1, 0]
+
+        sb = -1
+        bb = -1
+
+        sb_found = False
+        current_player = (self.dealer_index + 1) % self.num_players
+        for i in range(len(self.players)):
+            if self.player_status[current_player] == PlayerStatus.IN:
+                if sb_found:
+                    # big blind
+                    bb = current_player
+                    self.make_bet(current_player, self.config.big_blind)
+                    break
+                sb_found = True
+                sb = current_player
+                self.make_bet(current_player, self.config.small_blind)
+
+            current_player = (current_player + 1) % len(self.players)
+
+        print("SB", sb, "BB", bb)
 
         for index, round in enumerate(rounds):
             self.state = round
@@ -292,7 +351,7 @@ class Round:
                     player.send(Message(MessageType.ROUND_INFO, message=message).obj)
             else:
                 self.broadcast(Message(MessageType.ROUND_INFO, message=message).obj)
-            self.play_round()
+            self.play_round(bb)
 
             if self.check_all_fold():
                 self.handle_win()
@@ -302,23 +361,36 @@ class Round:
 
         self.handle_win()
 
-    def play_round(self):
+    def make_bet(self, player_index, amount):
+        self.bets[player_index] += amount
+        self.stacks[player_index] -= amount
+        self.pot += amount
+
+    def play_round(self, bb_index):
         round_over = False
-        max_bet = self.config.big_blind
+        max_bet = 0
         last_bet_index = -1
 
-        for raise_round in range(self.config.max_raise_rounds + 1):
-            current_player = (self.dealer_index + 1) % self.num_players
+        starting_player = (self.dealer_index + 1) % self.num_players
 
-            if self.state == GameState.PREFLOP:
-                # for first round, first 2 players are last to act
-                # skip dealer, bb, sb, then utg is first to go
-                current_player = (self.dealer_index + 3) % self.num_players
-                if raise_round == 0:
-                    last_bet_index = (self.dealer_index + 2) % self.num_players
+        if self.state == GameState.PREFLOP:
+            max_bet = self.config.small_blind
+            last_bet_index = bb_index
+            starting_player = (bb_index + 1) % self.num_players
+
+        for raise_round in range(self.config.max_raise_rounds + 1):
+            current_player = starting_player
 
             for i in range(len(self.players)):
-                # skip if player folded or bet
+                # if we got back to the last bet player, round is over
+                if current_player == last_bet_index:
+                    round_over = True
+                    break
+
+                # on start of raise round, first player becomes last bet player
+                if raise_round == 0 and i == 0:
+                    last_bet_index = current_player
+
                 if (
                     self.player_status[current_player] == PlayerStatus.OUT
                     or self.player_status[current_player] == PlayerStatus.BUST
@@ -330,10 +402,6 @@ class Round:
                     print("player", current_player, "is all in")
                     current_player = (current_player + 1) % len(self.players)
                     continue
-
-                if current_player == last_bet_index:
-                    round_over = True
-                    break
 
                 player = self.players[current_player]
 
@@ -362,6 +430,7 @@ class Round:
                         and raise_round == self.config.max_raise_rounds
                     ):
                         amount = max_bet - self.bets[current_player]
+                        print("LAST RR", max_bet, self.bets[current_player], amount)
 
                     self.bets[current_player] += amount
                     self.pot += amount
@@ -378,6 +447,7 @@ class Round:
                         last_bet_index = current_player
 
                 print(action_message)
+                print("round_state", self.bets, self.stacks, max_bet)
 
                 # broadcast move to other players
                 self.broadcast(Message(MessageType.INFO, message=action_message).obj)

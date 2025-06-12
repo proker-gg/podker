@@ -29,10 +29,10 @@ def main():
     num_players = 3
 
     players = []
-    for i in range(1):
+    for i in range(3):
         players.append(Player(i, script_code1))
-    for i in range(num_players - 1):
-        players.append(Player(i, script_code2))
+    # for i in range(num_players - 1):
+    # players.append(Player(i, script_code2))
 
     print("START GAME", time.time() - start)
     start = time.time()
@@ -43,9 +43,9 @@ def main():
         print(e)
         print(traceback.format_exc())
 
-    for i, p in enumerate(players):
-        print("LOGS", i)
-        print(p.read_logs())
+    # for i, p in enumerate(players):
+    #     print("LOGS", i)
+    #     print(p.read_logs())
 
     print("END", time.time() - start)
 

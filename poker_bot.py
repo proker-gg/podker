@@ -20,7 +20,8 @@ class poker_bot:
 
         log("Make Move", round_state, "CALL_COST", call_cost)
 
-        bet_amount = random.randint(call_cost, call_cost + 10)
+        bet_amount = random.randint(call_cost, call_cost + 20)
+        # bet_amount = call_cost + 1
         return {"action": "bet", "amount": bet_amount}
 
     def round_result(self):
